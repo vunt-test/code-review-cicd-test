@@ -1,9 +1,13 @@
 import json
 from datetime import date
 
-from django.http import JsonResponse
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.db import IntegrityError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -127,3 +131,122 @@ def create_campaign(request):
         },
         status=201,
     )
+
+
+def _require_admin(request):
+    user = getattr(request, 'user', None)
+    if not user or not user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    if not (user.is_staff or user.is_superuser):
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    return None
+
+
+def _parse_json_request(request):
+    try:
+        raw = request.body.decode('utf-8')
+        return json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        raise ValueError('Invalid JSON body')
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def users_list_create(request):
+    admin_error = _require_admin(request)
+    if admin_error:
+        return admin_error
+
+    User = get_user_model()
+
+    if request.method == 'GET':
+        users = User.objects.all().order_by('id')
+        return JsonResponse(
+            [
+                {'id': u.id, 'username': u.username, 'email': u.email}
+                for u in users
+            ],
+            safe=False,
+        )
+
+    # POST
+    try:
+        data = _parse_json_request(request)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+
+    if not isinstance(username, str) or not username.strip():
+        return _bad_request('Missing or invalid field: username', {'username': 'required'})
+    if not isinstance(email, str) or not email.strip():
+        return _bad_request('Missing or invalid field: email', {'email': 'required'})
+    try:
+        validate_email(email)
+    except ValidationError:
+        return _bad_request('Invalid field: email', {'email': 'must be a valid email'})
+    if not isinstance(password, str) or not password:
+        return _bad_request('Missing or invalid field: password', {'password': 'required'})
+
+    try:
+        user = User.objects.create_user(
+            username=username.strip(),
+            email=email.strip(),
+            password=password,
+        )
+    except (ValidationError, IntegrityError):
+        return _bad_request('Failed to create user', {'username': 'may already exist'})
+
+    return JsonResponse({'id': user.id, 'username': user.username, 'email': user.email}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['PATCH', 'PUT', 'DELETE'])
+def user_detail_update_delete(request, user_id: int):
+    admin_error = _require_admin(request)
+    if admin_error:
+        return admin_error
+
+    User = get_user_model()
+    user = get_object_or_404(User, pk=user_id)
+
+    if request.method == 'DELETE':
+        user.delete()
+        return JsonResponse({'deleted': True})
+
+    # PATCH/PUT
+    try:
+        data = _parse_json_request(request)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    if 'username' in data:
+        username = data.get('username')
+        if not isinstance(username, str) or not username.strip():
+            return _bad_request('Invalid field: username', {'username': 'must be a non-empty string'})
+        user.username = username.strip()
+
+    if 'email' in data:
+        email = data.get('email')
+        if not isinstance(email, str) or not email.strip():
+            return _bad_request('Invalid field: email', {'email': 'must be a non-empty string'})
+        try:
+            validate_email(email)
+        except ValidationError:
+            return _bad_request('Invalid field: email', {'email': 'must be a valid email'})
+        user.email = email.strip()
+
+    if 'password' in data:
+        password = data.get('password')
+        if not isinstance(password, str) or not password:
+            return _bad_request('Invalid field: password', {'password': 'must be a non-empty string'})
+        user.set_password(password)
+
+    try:
+        user.save()
+    except (ValidationError, IntegrityError):
+        return _bad_request('Failed to update user', {'username': 'may already exist'})
+
+    return JsonResponse({'id': user.id, 'username': user.username, 'email': user.email})
