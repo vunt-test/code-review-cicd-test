@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -40,6 +41,25 @@ def _bad_request(message, fields=None):
     if fields:
         payload['fields'] = fields
     return JsonResponse(payload, status=400)
+
+
+def _normalize_validation_error(exc: ValidationError):
+    message_dict = getattr(exc, 'message_dict', None)
+    if message_dict:
+        return message_dict
+    messages = getattr(exc, 'messages', None)
+    if messages:
+        return {'non_field_errors': messages}
+    return {'non_field_errors': ['Invalid data']}
+
+
+def _integrity_error_fields(exc: IntegrityError):
+    msg = str(exc).lower()
+    field_match = re.search(r'(?:^|[^\w])(username|email)(?:$|[^\w])', msg)
+    if field_match:
+        field = field_match.group(1)
+        return {field: 'already exists'}
+    return {'non_field_errors': 'Could not save due to a data constraint'}
 
 
 @require_POST
@@ -194,8 +214,10 @@ def users_list_create(request):
             email=email.strip(),
             password=password,
         )
-    except (ValidationError, IntegrityError):
-        return _bad_request('Failed to create user', {'username': 'may already exist'})
+    except ValidationError as exc:
+        return _bad_request('Validation error', _normalize_validation_error(exc))
+    except IntegrityError as exc:
+        return _bad_request('Failed to create user', _integrity_error_fields(exc))
 
     return JsonResponse({'id': user.id, 'username': user.username, 'email': user.email}, status=201)
 
@@ -243,7 +265,9 @@ def user_detail_update_delete(request, user_id: int):
 
     try:
         user.save()
-    except (ValidationError, IntegrityError):
-        return _bad_request('Failed to update user', {'username': 'may already exist'})
+    except ValidationError as exc:
+        return _bad_request('Validation error', _normalize_validation_error(exc))
+    except IntegrityError as exc:
+        return _bad_request('Failed to update user', _integrity_error_fields(exc))
 
     return JsonResponse({'id': user.id, 'username': user.username, 'email': user.email})

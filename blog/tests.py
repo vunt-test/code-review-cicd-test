@@ -1,6 +1,8 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -177,3 +179,41 @@ class UserManagementAPITest(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_user_create_duplicate_username_returns_username_field(self):
+        self.client.force_login(self.admin_user)
+        payload = {
+            'username': self.normal_user.username,
+            'email': 'fresh@example.com',
+            'password': 'pass12345',
+        }
+        response = self.client.post(
+            reverse('users_list_create'),
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data['error'], 'Failed to create user')
+        self.assertEqual(data['fields']['username'], 'already exists')
+
+    def test_user_create_validation_error_uses_message_dict(self):
+        self.client.force_login(self.admin_user)
+        payload = {
+            'username': 'newuser2',
+            'email': 'newuser2@example.com',
+            'password': 'newpass123',
+        }
+        with patch('blog.views.get_user_model') as mock_get_user_model:
+            mock_user_model = mock_get_user_model.return_value
+            mock_user_model.objects.create_user.side_effect = ValidationError(
+                {'email': ['domain is blocked']}
+            )
+            response = self.client.post(
+                reverse('users_list_create'),
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'Validation error')
+        self.assertEqual(response.json()['fields'], {'email': ['domain is blocked']})
