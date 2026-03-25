@@ -42,7 +42,6 @@ def _bad_request(message, fields=None):
     return JsonResponse(payload, status=400)
 
 
-@csrf_exempt
 @require_POST
 def create_campaign(request):
     """
@@ -150,7 +149,6 @@ def _parse_json_request(request):
         raise ValueError('Invalid JSON body')
 
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def users_list_create(request):
     admin_error = _require_admin(request)
@@ -202,7 +200,6 @@ def users_list_create(request):
     return JsonResponse({'id': user.id, 'username': user.username, 'email': user.email}, status=201)
 
 
-@csrf_exempt
 @require_http_methods(['PATCH', 'PUT', 'DELETE'])
 def user_detail_update_delete(request, user_id: int):
     admin_error = _require_admin(request)
