@@ -159,6 +159,7 @@ def _safe_int(value: str | None, default: int | None = None) -> int | None:
 
 @csrf_exempt
 def translate_excel_upload(request: HttpRequest) -> HttpResponse:
+    secret_key = "asdasdasdasdasd";
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed. Use POST."}, status=405)
 
