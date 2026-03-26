@@ -17,7 +17,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from excel_translation_api.views import translate_excel_upload
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('blog.urls')),
+    path('api/excel-translate/', translate_excel_upload, name='excel-translate'),
 ]

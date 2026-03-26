@@ -1,0 +1,90 @@
+---
+description: Enforce domain boundaries and module separation when adding new features
+alwaysApply: true
+---
+
+# Domain Boundary Rules
+
+## 1. Core Principle
+The codebase must preserve clear domain boundaries.
+
+Each business domain should have its own module, package, or feature area.
+Do not place unrelated business logic into an existing module just because it is convenient.
+
+---
+
+## 2. When to Create a New Module
+Create a new module/package/feature area when ALL or MOST of the following are true:
+- the task introduces a new business domain
+- the new functionality has its own entities, services, controllers, or APIs
+- the logic is not a natural extension of an existing module
+- the feature will likely grow independently in the future
+- mixing it into an existing module would reduce clarity or maintainability
+
+Examples:
+- blog management -> belongs to blogs module
+- user management -> should belong to users module, not blogs module
+- order management -> should belong to orders module
+- notification management -> should belong to notifications module
+
+---
+
+## 3. Do Not Mix Unrelated Domains
+Do not place code for one domain inside another domain's module.
+
+Examples of incorrect behavior:
+- adding user CRUD inside blogs service/package
+- placing order logic inside auth module
+- placing permission logic inside product module
+
+If the feature belongs to a different domain, create a separate module instead.
+
+---
+
+## 4. Allowed Extension of Existing Modules
+It is acceptable to extend an existing module only when the new task is a direct continuation of that module’s responsibility.
+
+Examples:
+- adding blog publish/unpublish -> extend blogs module
+- adding blog category support -> extend blogs module
+- adding blog comment moderation -> may extend blogs module if comments are treated as part of blog domain
+
+Not acceptable:
+- adding user profile management into blogs module
+- adding staff permission management into blogs module
+
+---
+
+## 5. Required Agent Behavior
+Before implementation, the agent must determine:
+1. Which business domain the task belongs to
+2. Whether that domain already has a dedicated module
+3. Whether the requested functionality is an extension of an existing module or a new domain
+
+If it is a new domain, the agent should create a new module/package structure following the existing architectural conventions.
+
+---
+
+## 6. Module Creation Rule
+When a new module is needed:
+- follow the project's existing package/module naming convention
+- keep structure consistent with existing modules
+- place controller/service/repository/model files inside the new module
+- avoid scattering domain files across unrelated modules
+
+---
+
+## 7. Priority Rule
+When deciding between:
+- adding code quickly into an existing module
+- or creating a proper new domain module
+
+always prefer the proper domain module if the functionality belongs to a separate business area.
+
+---
+
+## 8. Reporting Rule
+The agent should explicitly state:
+- which domain the task belongs to
+- whether a new module is created
+- why the chosen module placement is correct
